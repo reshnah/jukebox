@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Jukebox Request</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background-color: #fff; padding: 2em; border-radius: 10px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); width: 90%; max-width: 600px; text-align: center; }
+        h1 { color: #333; }
+        #input-area { display: flex; gap: 10px; margin-top: 1em; }
+        #user-input { flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; }
+        #submit-btn { padding: 10px 20px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        #playlist-area { margin-top: 2em; text-align: left; }
+        #playlist-list { list-style-type: none; padding: 0; margin-top: 0.5em; }
+        .song-item { padding: 8px; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; border-radius: 3px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LLM Jukebox</h1>
+        <p>Request a song or mood, and it will be played on the jukebox display.</p>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="e.g., 'play some 90s rock'">
+            <button id="submit-btn">Add to Queue</button>
+        </div>
+        <div id="playlist-area">
+            <h2>Playlist Queue:</h2>
+            <ul id="playlist-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('user-input');
+        const button = document.getElementById('submit-btn');
+        const playlistList = document.getElementById('playlist-list');
+
+        //async function updatePlaylist() {
+        //    const response = await fetch('/get_playlist');
+        //    const data = await response.json();
+        //    playlistList.innerHTML = '';
+        //    data.playlist.forEach(title => {
+        //        const li = document.createElement('li');
+        //        li.textContent = title;
+        //        li.className = 'song-item';
+        //        playlistList.appendChild(li);
+        //    });
+        //}
+        async function updatePlaylist() {
+            try {
+                // Fetch playlist from the display server on port 5001
+                const response = await fetch('http://127.0.0.1:5001/get_playlist_status');
+                const data = await response.json();
+                
+                // Clear the existing list
+                playlistList.innerHTML = '';
+                
+                // Check if the playlist array exists and is not empty
+                if (data.playlist && data.playlist.length > 0) {
+                    data.playlist.forEach(title => {
+                        const li = document.createElement('li');
+                        li.textContent = title;
+                        li.className = 'song-item';
+                        playlistList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'Playlist is empty.';
+                    li.className = 'song-item';
+                    playlistList.appendChild(li);
+                }
+            } catch (error) {
+                console.error("Error fetching playlist:", error);
+                playlistList.innerHTML = '<li class="song-item">Could not connect to jukebox.</li>';
+            }
+        }
+        
+        async function addSong() {
+            const userInput = input.value.trim();
+            if (!userInput) return;
+
+            const response = await fetch('/add_song', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_input: userInput })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                input.value = '';
+                updatePlaylist();
+            } else {
+                alert('Error adding song: ' + data.error);
+            }
+        }
+        
+        button.addEventListener('click', addSong);
+        input.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') addSong();
+        });
+
+        // Periodically refresh the playlist
+        setInterval(updatePlaylist, 3000);
+        updatePlaylist();
+    </script>
+</body>
+</html>

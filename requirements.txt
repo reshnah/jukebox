@@ -1,0 +1,3 @@
+Flask
+selenium
+google-generativeai
