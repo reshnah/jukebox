@@ -2,8 +2,7 @@ import os
 import requests
 from flask import Flask, render_template, request, jsonify
 import google.generativeai as genai
-from yt_dlp import YoutubeDL # Ensure this is installed: pip install yt-dlp
-import yt_dlp
+from yt_dlp import YoutubeDL
 
 # Configure Google Gemini API key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -14,14 +13,9 @@ genai.configure(api_key=GEMINI_API_KEY)
 app = Flask(__name__)
 
 DISPLAY_SERVER_URL = "http://127.0.0.1:5001"
-playlist = [] # This playlist is just for the request page's display
+playlist = []
 
-def search_youtube_ids(query, max_results=10):
-    """
-    Searches YouTube for a song and returns a list of its potential video IDs
-    using yt-dlp.
-    """
-
+def search_youtube_ids(query, max_results=5):
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
@@ -34,7 +28,6 @@ def search_youtube_ids(query, max_results=10):
         'max_downloads': max_results # Get up to max_results video candidates
     }
 
-    
     video_ids = []
     with YoutubeDL(ydl_opts) as ydl:
         try:
@@ -43,13 +36,20 @@ def search_youtube_ids(query, max_results=10):
                 for entry in info['entries']:
                     if 'id' in entry:
                         video_ids.append(entry['id'])
-            return video_ids
         except Exception as e:
             print(f"Error searching YouTube with yt-dlp for '{query}': {e}")
-            return [] # Return empty list on error
+            
+    return video_ids
 
 @app.route("/", methods=["GET"])
 def index():
+    request_address = f"http://{request.host}"
+    # As soon as a user accesses this page, send its address to the display
+    try:
+        requests.post(f"{DISPLAY_SERVER_URL}/set_request_address", json={"address": request_address})
+    except requests.exceptions.RequestException as e:
+        print(f"Could not set request address on display server: {e}")
+        
     return render_template("request_songs.html")
 
 @app.route("/add_song", methods=["POST"])
@@ -66,12 +66,11 @@ def add_song():
         song_title = response.text.strip()
         
         if song_title:
-            video_ids = search_youtube_ids(song_title) # Get a list of IDs
+            video_ids = search_youtube_ids(song_title)
             if video_ids:
-                # Send the list of video IDs to the jukebox display server
+                # Also send the request page address to the display server
                 requests.post(f"{DISPLAY_SERVER_URL}/add_to_queue", json={"video_ids": video_ids, "title": song_title})
                 
-                # Update local playlist for display
                 playlist.append({"title": song_title, "video_ids": video_ids})
 
                 return jsonify({"success": True, "playlist": [s['title'] for s in playlist]})
@@ -85,7 +84,6 @@ def add_song():
 
 @app.route("/get_playlist", methods=["GET"])
 def get_playlist():
-    # This route will now pull the playlist from the jukebox server
     try:
         response = requests.get(f"{DISPLAY_SERVER_URL}/get_playlist_status")
         return jsonify(response.json())

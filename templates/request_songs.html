@@ -48,32 +48,30 @@
         //}
         async function updatePlaylist() {
             try {
-                // Fetch playlist from the display server on port 5001
-                const response = await fetch('http://127.0.0.1:5001/get_playlist_status');
+                const response = await fetch('/get_playlist');
                 const data = await response.json();
                 
-                // Clear the existing list
+                const playlistList = document.getElementById('playlist-list');
                 playlistList.innerHTML = '';
                 
-                // Check if the playlist array exists and is not empty
                 if (data.playlist && data.playlist.length > 0) {
-                    data.playlist.forEach(title => {
-                        const li = document.createElement('li');
-                        li.textContent = title;
-                        li.className = 'song-item';
-                        playlistList.appendChild(li);
+                    data.playlist.forEach(songTitle => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = songTitle;
+                        playlistList.appendChild(listItem);
                     });
                 } else {
-                    const li = document.createElement('li');
-                    li.textContent = 'Playlist is empty.';
-                    li.className = 'song-item';
-                    playlistList.appendChild(li);
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'Jukebox queue is empty.';
+                    playlistList.appendChild(listItem);
                 }
             } catch (error) {
-                console.error("Error fetching playlist:", error);
-                playlistList.innerHTML = '<li class="song-item">Could not connect to jukebox.</li>';
+                console.error('Error fetching playlist:', error);
+                const playlistList = document.getElementById('playlist-list');
+                playlistList.innerHTML = '<li>Error fetching playlist. Jukebox may be offline.</li>';
             }
         }
+
         
         async function addSong() {
             const userInput = input.value.trim();

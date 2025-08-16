@@ -49,7 +49,6 @@
             text-align: center;
         }
 
-        /* --- New styles for the bottom section --- */
         #bottom-container {
             display: flex;
             align-items: flex-start;
@@ -58,24 +57,31 @@
             gap: 20px;
         }
         
-        .request-link {
-            text-decoration: none;
-            color: #fff;
+        .qr-code-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
             background-color: #1a1a1a;
             border: 2px solid #555;
-            padding: 20px;
             border-radius: 8px;
+        }
+        
+        #request-qr-code {
+            width: 150px;
+            height: 150px;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .qr-message {
             font-size: 1.2em;
             font-weight: bold;
             text-align: center;
-            flex-grow: 1; /* Allow link container to grow */
-            max-width: 300px; /* Set a reasonable max width */
-        }
-        
-        .request-link span {
-            display: block;
-            font-size: 0.8em;
-            color: #ccc;
+            color: #fff;
         }
 
         #playlist-container {
@@ -122,10 +128,10 @@
         </div>
         
         <div id="bottom-container">
-            <a href="http://127.0.0.1:5000" class="request-link" target="_blank">
-                Request a Song
-                <span>http://127.0.0.1:5000</span>
-            </a>
+            <div class="qr-code-container">
+                <div id="request-qr-code"></div>
+                <div class="qr-message" id="request-message">Not loaded</div>
+            </div>
             <div id="playlist-container">
                 <h2>Up Next</h2>
                 <ul id="playlist-list">
@@ -134,6 +140,7 @@
         </div>
     </div>
     <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
 <script>
     let player;
@@ -141,6 +148,10 @@
     let pollingInterval = null;
 
     const playlistList = document.getElementById('playlist-list');
+
+    // --- New variables for dynamic link ---
+    const requestLink = document.getElementById('request-link');
+    const requestAddressSpan = document.getElementById('request-address');
 
     function onYouTubeIframeAPIReady() {
         player = new YT.Player('youtube-player', {
@@ -249,6 +260,43 @@
     // Call updatePlaylist() on initial load and then every 3 seconds
     updatePlaylist();
     setInterval(updatePlaylist, 3000);
+    
+    // --- NEW FUNCTION TO UPDATE QR CODE ---
+    let qrCodeInstance = null;
+    const qrCodeContainer = document.getElementById('request-qr-code');
+    const qrMessage = document.getElementById('request-message');
+    async function updateRequestLink() {
+        //console.log("updateRequestLink()");
+        try {
+            const response = await fetch('/get_request_address');
+            const data = await response.json();
+            
+            if (data.address && data.address !== "Not loaded") {
+                qrCodeContainer.innerHTML = ''; 
+                new QRCode(qrCodeContainer, {
+                    text: data.address,
+                    width: 150,
+                    height: 150,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+                qrMessage.textContent = "Scan to Request a Song";
+            } else {
+                qrCodeContainer.innerHTML = '';
+                qrMessage.textContent = "Not loaded";
+            }
+        } catch (error) {
+            console.error("Error fetching request address:", error);
+        }
+    }
+    
+    // Call this function once on load and then periodically
+    updateRequestLink();
+    setInterval(updateRequestLink, 5000); // Poll for the address every 5 seconds
+
+    
+    
 </script>
 </body>
 </html>

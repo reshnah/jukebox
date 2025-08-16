@@ -9,6 +9,9 @@ video_queue = queue.Queue()
 current_song_data = None
 playlist_for_display = []
 
+# --- New global variable to store the request page address ---
+request_page_address = None
+
 @app.route("/add_to_queue", methods=["POST"])
 def add_to_queue():
     video_ids = request.json.get("video_ids")
@@ -23,13 +26,11 @@ def add_to_queue():
     print(f"Added song '{title}' with {len(video_ids)} candidates to queue.")
     return jsonify({"success": True, "message": f"Added video {title} to queue."})
 
-# --- NEW ROUTE for video end event ---
 @app.route("/video_ended", methods=["GET"])
 def handle_video_ended():
     global current_song_data
     
-    # After a video ends, we should move to the next user-requested song
-    current_song_data = None # Reset the current song state
+    current_song_data = None
     
     if not video_queue.empty():
         next_song = video_queue.get()
@@ -56,12 +57,10 @@ def handle_video_ended():
         print("Video ended. Queue is empty.")
         return jsonify({"success": False, "message": "Queue is empty."})
 
-# --- NEW ROUTE for player errors ---
 @app.route("/video_error", methods=["GET"])
 def handle_video_error():
     global current_song_data
 
-    # If there's an error, try the next fallback for the current song
     if current_song_data and current_song_data['candidate_index'] < len(current_song_data['video_ids']) - 1:
         current_song_data['candidate_index'] += 1
         print(f"Error occurred. Retrying '{current_song_data['title']}' with candidate {current_song_data['candidate_index']}.")
@@ -73,12 +72,26 @@ def handle_video_error():
             "title": current_song_data['title']
         })
     else:
-        # No fallbacks left for the current song, so move to the next song
-        return handle_video_ended() # Reuse the logic for getting the next song
+        return handle_video_ended()
 
 @app.route("/get_playlist_status", methods=["GET"])
 def get_playlist_status():
     return jsonify({"playlist": playlist_for_display})
+
+# --- New routes to manage the request page address ---
+@app.route("/set_request_address", methods=["POST"])
+def set_request_address():
+    global request_page_address
+    request_page_address = request.json.get("address")
+    print(f"Request page address set to: {request_page_address}")
+    return jsonify({"success": True})
+
+@app.route("/get_request_address", methods=["GET"])
+def get_request_address():
+    if request_page_address:
+        return jsonify({"address": request_page_address})
+    else:
+        return jsonify({"address": "Not loaded"})
 
 @app.route("/", methods=["GET"])
 def display_page():
