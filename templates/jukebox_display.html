@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jukebox Display</title>
     <style>
+        /* Base styles for the body and main container */
         body {
             background-color: #000;
             color: #fff;
@@ -20,20 +21,56 @@
 
         #main-container {
             display: flex;
-            flex-direction: column;
             align-items: center;
             width: 100%;
             max-width: 1600px;
             gap: 20px;
         }
 
+        /* --- Below Player Layout Styles (Default) --- */
+        body.below_player #main-container {
+            flex-direction: column;
+        }
+        body.below_player #video-and-info {
+            width: 100%;
+        }
+        body.below_player #bottom-container {
+            flex-direction: row;
+            justify-content: center;
+            width: 100%;
+        }
+        body.below_player #playlist-container {
+            max-height: 200px;
+        }
+        body.below_player .qr-code-container {
+            max-width: 300px;
+        }
+
+        /* --- Right Side Layout Styles --- */
+        body.right_of_player #main-container {
+            flex-direction: row;
+        }
+        body.right_of_player #video-and-info {
+            width: 70%; /* Video player takes up 70% of the screen */
+        }
+        body.right_of_player #bottom-container {
+            flex-direction: column; /* Stacks QR and playlist vertically */
+            width: 30%; /* Side container takes up 30% */
+            height: 100%; /* Fills the vertical space */
+        }
+        body.right_of_player #playlist-container {
+            max-height: none; /* Allows playlist to grow */
+        }
+        body.right_of_player .qr-code-container {
+            max-width: none;
+        }
+
+        /* Shared Styles */
         #video-and-info {
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 100%;
         }
-
         #player-container {
             width: 100%;
             aspect-ratio: 16 / 9;
@@ -42,21 +79,11 @@
             overflow: hidden;
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
-
         #now-playing {
             font-size: 2em;
             margin-bottom: 10px;
             text-align: center;
         }
-
-        #bottom-container {
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            width: 100%;
-            gap: 20px;
-        }
-        
         .qr-code-container {
             flex-grow: 1;
             display: flex;
@@ -67,7 +94,6 @@
             border: 2px solid #555;
             border-radius: 8px;
         }
-        
         #request-qr-code {
             width: 150px;
             height: 150px;
@@ -76,49 +102,63 @@
             border-radius: 8px;
             margin-bottom: 10px;
         }
-
         .qr-message {
             font-size: 1.2em;
             font-weight: bold;
             text-align: center;
             color: #fff;
         }
-
         #playlist-container {
             width: 100%;
             border: 2px solid #555;
             padding: 10px;
             background-color: #1a1a1a;
-            max-height: 200px;
             overflow-y: auto;
             border-radius: 8px;
         }
-
         #playlist-container h2 {
             margin-top: 0;
             border-bottom: 1px solid #555;
             padding-bottom: 5px;
             text-align: center;
         }
-
         #playlist-list {
             list-style-type: none;
             padding: 0;
             margin: 0;
         }
-
         #playlist-list li {
             padding: 12px;
             border-bottom: 1px solid #444;
             font-size: 1.1em;
         }
-
         #playlist-list li:last-child {
             border-bottom: none;
         }
+
+        /* --- Layout Toggle Button UI --- */
+        #layout-toggle-button {
+            position: fixed;
+            bottom: 20px; /* Changed from top to bottom */
+            right: 20px;
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            z-index: 1000;
+        }
+        #layout-toggle-button:hover {
+            background-color: #0056b3;
+        }
+
     </style>
 </head>
 <body>
+    <button id="layout-toggle-button">Toggle Layout</button>
+
     <div id="main-container">
         <div id="video-and-info">
             <div id="player-container">
@@ -141,162 +181,185 @@
     </div>
     <script src="https://www.youtube.com/iframe_api"></script>
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <script>
+        let player;
+        const nowPlayingElement = document.getElementById('now-playing');
+        let pollingInterval = null;
+        const playlistList = document.getElementById('playlist-list');
+        const qrCodeContainer = document.getElementById('request-qr-code');
+        const qrMessage = document.getElementById('request-message');
+        const layoutToggleButton = document.getElementById('layout-toggle-button');
+        let currentLayout = "below_player"; // Local state for layout
 
-<script>
-    let player;
-    const nowPlayingElement = document.getElementById('now-playing');
-    let pollingInterval = null;
+        // --- Layout Toggling Logic ---
+        async function setLayout(layoutType) {
+            try {
+                const response = await fetch('/set_layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ layout: layoutType })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentLayout = data.layout;
+                    document.body.className = currentLayout;
+                }
+            } catch (error) {
+                console.error("Error setting layout:", error);
+            }
+        }
 
-    const playlistList = document.getElementById('playlist-list');
+        async function getLayout() {
+            try {
+                const response = await fetch('/get_layout');
+                const data = await response.json();
+                currentLayout = data.layout;
+                document.body.className = currentLayout;
+            } catch (error) {
+                console.error("Error getting layout:", error);
+            }
+        }
 
-    // --- New variables for dynamic link ---
-    const requestLink = document.getElementById('request-link');
-    const requestAddressSpan = document.getElementById('request-address');
-
-    function onYouTubeIframeAPIReady() {
-        player = new YT.Player('youtube-player', {
-            height: '100%',
-            width: '100%',
-            videoId: '',
-            playerVars: {
-                'autoplay': 1,
-                'mute': 1
-            },
-            events: {
-                'onReady': onPlayerReady,
-                'onStateChange': onPlayerStateChange,
-                'onError': onPlayerError
+        layoutToggleButton.addEventListener('click', () => {
+            if (currentLayout === "below_player") {
+                setLayout("right_of_player");
+            } else {
+                setLayout("below_player");
             }
         });
-    }
 
-    function onPlayerReady(event) {
-        console.log("YouTube player is ready. Initiating playback loop.");
-        startPolling('/video_ended');
-    }
+        // --- The rest of your existing JavaScript ---
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtube-player', {
+                height: '100%',
+                width: '100%',
+                videoId: '',
+                playerVars: {
+                    'autoplay': 1,
+                    'mute': 1
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange,
+                    'onError': onPlayerError
+                }
+            });
+        }
 
-    function onPlayerStateChange(event) {
-        if (event.data === YT.PlayerState.ENDED) {
-            console.log("Video ended. Requesting next song from server...");
+        function onPlayerReady(event) {
+            console.log("YouTube player is ready. Initiating playback loop.");
             startPolling('/video_ended');
-        } else if (event.data === YT.PlayerState.PLAYING) {
-            stopPolling();
-            const videoData = player.getVideoData();
-            nowPlayingElement.textContent = `Now Playing: ${videoData.title}`;
-            if (player.isMuted()) {
-                player.unMute();
+            updateRequestLink();
+            setInterval(updateRequestLink, 5000);
+            updatePlaylist();
+            setInterval(updatePlaylist, 3000);
+            getLayout(); // Get and apply the layout on initial load
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.ENDED) {
+                console.log("Video ended. Requesting next song from server...");
+                startPolling('/video_ended');
+            } else if (event.data === YT.PlayerState.PLAYING) {
+                stopPolling();
+                const videoData = player.getVideoData();
+                nowPlayingElement.textContent = `Now Playing: ${videoData.title}`;
+                if (player.isMuted()) {
+                    player.unMute();
+                }
             }
         }
-    }
 
-    function onPlayerError(event) {
-        console.error("YouTube Player Error:", event.data);
-        nowPlayingElement.textContent = `Error playing video. Skipping...`;
-        startPolling('/video_error');
-    }
-
-    function startPolling(endpoint) {
-        // --- CORRECTED LOGIC ---
-        // Clear any existing polling interval before starting a new one
-        if (pollingInterval !== null) {
-            clearInterval(pollingInterval);
+        function onPlayerError(event) {
+            console.error("YouTube Player Error:", event.data);
+            nowPlayingElement.textContent = `Error playing video. Skipping...`;
+            startPolling('/video_error');
         }
-        pollingInterval = setInterval(() => fetchNextVideo(endpoint), 3000);
-        console.log("Polling for new videos started.");
-    }
 
-    function stopPolling() {
-        if (pollingInterval !== null) {
-            clearInterval(pollingInterval);
-            pollingInterval = null;
-            console.log("Polling stopped.");
+        function startPolling(endpoint) {
+            if (pollingInterval !== null) {
+                clearInterval(pollingInterval);
+            }
+            pollingInterval = setInterval(() => fetchNextVideo(endpoint), 3000);
+            console.log("Polling for new videos started.");
         }
-    }
-    
-    async function fetchNextVideo(endpoint) {
-        console.log(`Polling for next video from ${endpoint}...`);
-        try {
-            const response = await fetch(endpoint);
-            const data = await response.json();
 
-            if (data.success) {
-                console.log(`Found a video candidate: ${data.video_id}. Loading...`);
-                player.mute();
-                player.loadVideoById(data.video_id);
-            } else {
-                console.log("Queue is empty or no valid candidates found. Continuing to poll.");
+        function stopPolling() {
+            if (pollingInterval !== null) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                console.log("Polling stopped.");
+            }
+        }
+        
+        async function fetchNextVideo(endpoint) {
+            console.log(`Polling for next video from ${endpoint}...`);
+            try {
+                const response = await fetch(endpoint);
+                const data = await response.json();
+
+                if (data.success) {
+                    console.log(`Found a video candidate: ${data.video_id}. Loading...`);
+                    player.mute();
+                    player.loadVideoById(data.video_id);
+                } else {
+                    console.log("Queue is empty or no valid candidates found. Continuing to poll.");
+                    nowPlayingElement.textContent = "Jukebox is ready...";
+                    //startPolling('/video_ended');
+                }
+            } catch (error) {
+                console.error("Error fetching next video:", error);
                 nowPlayingElement.textContent = "Jukebox is ready...";
-                //startPolling('/video_ended');
             }
-        } catch (error) {
-            console.error("Error fetching next video:", error);
-            nowPlayingElement.textContent = "Jukebox is ready...";
         }
-    }
-    // --- NEW FUNCTION TO UPDATE PLAYLIST ---
-    async function updatePlaylist() {
-        try {
-            const response = await fetch('/get_playlist_status');
-            const data = await response.json();
-            
-            playlistList.innerHTML = ''; // Clear existing list
-            
-            if (data.playlist && data.playlist.length > 0) {
-                data.playlist.forEach(songTitle => {
-                    const listItem = document.createElement('li');
-                    listItem.textContent = songTitle;
-                    playlistList.appendChild(listItem);
-                });
-            } else {
-                const listItem = document.createElement('li');
-                listItem.textContent = 'Queue is empty.';
-                playlistList.appendChild(listItem);
-            }
-        } catch (error) {
-            console.error("Error fetching playlist status:", error);
-        }
-    }
-    
-    // Call updatePlaylist() on initial load and then every 3 seconds
-    updatePlaylist();
-    setInterval(updatePlaylist, 3000);
-    
-    // --- NEW FUNCTION TO UPDATE QR CODE ---
-    let qrCodeInstance = null;
-    const qrCodeContainer = document.getElementById('request-qr-code');
-    const qrMessage = document.getElementById('request-message');
-    async function updateRequestLink() {
-        //console.log("updateRequestLink()");
-        try {
-            const response = await fetch('/get_request_address');
-            const data = await response.json();
-            
-            if (data.address && data.address !== "Not loaded") {
-                qrCodeContainer.innerHTML = ''; 
-                new QRCode(qrCodeContainer, {
-                    text: data.address,
-                    width: 150,
-                    height: 150,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.H
-                });
-                qrMessage.textContent = "Scan to Request a Song";
-            } else {
-                qrCodeContainer.innerHTML = '';
-                qrMessage.textContent = "Not loaded";
-            }
-        } catch (error) {
-            console.error("Error fetching request address:", error);
-        }
-    }
-    
-    // Call this function once on load and then periodically
-    updateRequestLink();
-    setInterval(updateRequestLink, 5000); // Poll for the address every 5 seconds
 
-    
-    
-</script>
+        async function updatePlaylist() {
+            try {
+                const response = await fetch('/get_playlist_status');
+                const data = await response.json();
+                
+                playlistList.innerHTML = '';
+                
+                if (data.playlist && data.playlist.length > 0) {
+                    data.playlist.forEach(songTitle => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = songTitle;
+                        playlistList.appendChild(listItem);
+                    });
+                } else {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = 'Queue is empty.';
+                    playlistList.appendChild(listItem);
+                }
+            } catch (error) {
+                console.error("Error fetching playlist status:", error);
+            }
+        }
+
+        async function updateRequestLink() {
+            try {
+                const response = await fetch('/get_request_address');
+                const data = await response.json();
+                
+                if (data.address && data.address !== "Not loaded") {
+                    qrCodeContainer.innerHTML = ''; 
+                    new QRCode(qrCodeContainer, {
+                        text: data.address,
+                        width: 150,
+                        height: 150,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                    qrMessage.textContent = "Scan to Request a Song";
+                } else {
+                    qrCodeContainer.innerHTML = '';
+                    qrMessage.textContent = "Not loaded";
+                }
+            } catch (error) {
+                console.error("Error fetching request address:", error);
+            }
+        }
+    </script>
 </body>
 </html>

@@ -8,9 +8,10 @@ CORS(app)
 video_queue = queue.Queue()
 current_song_data = None
 playlist_for_display = []
-
-# --- New global variable to store the request page address ---
 request_page_address = None
+
+# --- New global variable for layout ---
+current_layout = "below_player"
 
 @app.route("/add_to_queue", methods=["POST"])
 def add_to_queue():
@@ -78,7 +79,6 @@ def handle_video_error():
 def get_playlist_status():
     return jsonify({"playlist": playlist_for_display})
 
-# --- New routes to manage the request page address ---
 @app.route("/set_request_address", methods=["POST"])
 def set_request_address():
     global request_page_address
@@ -92,6 +92,21 @@ def get_request_address():
         return jsonify({"address": request_page_address})
     else:
         return jsonify({"address": "Not loaded"})
+
+# --- New routes for layout selection ---
+@app.route("/set_layout", methods=["POST"])
+def set_layout():
+    global current_layout
+    layout = request.json.get("layout")
+    if layout in ["below_player", "right_of_player"]:
+        current_layout = layout
+        print(f"Layout set to: {current_layout}")
+        return jsonify({"success": True, "layout": current_layout})
+    return jsonify({"success": False, "error": "Invalid layout."}), 400
+
+@app.route("/get_layout", methods=["GET"])
+def get_layout():
+    return jsonify({"layout": current_layout})
 
 @app.route("/", methods=["GET"])
 def display_page():

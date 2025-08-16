@@ -15,7 +15,7 @@ app = Flask(__name__)
 DISPLAY_SERVER_URL = "http://127.0.0.1:5001"
 playlist = []
 
-def search_youtube_ids(query, max_results=5):
+def search_youtube_ids(query, max_results=10):
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
